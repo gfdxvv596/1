@@ -105,9 +105,10 @@ function applyCss(cssContent) {
         styleTag.id = 'typing-indicator-theme-style';
         document.head.appendChild(styleTag);
     }
-    // 使主题CSS同时对真实指示器和预览指示器生效
-    const previewAwareCss = cssContent.replace(/#typing_indicator/g, '#typing_indicator, #ti_preview_indicator');
-    styleTag.textContent = previewAwareCss;
+    // 通过替换选择器，确保自定义主题能同时正确应用到真实指示器和预览指示器上。
+    const realCss = cssContent.replace(/#typing_indicator/g, '#chat #typing_indicator');
+    const previewCss = cssContent.replace(/#typing_indicator/g, '#ti_preview_indicator');
+    styleTag.textContent = realCss + '\n' + previewCss;
 }
 
 /**
@@ -115,19 +116,28 @@ function applyCss(cssContent) {
  */
 function injectGlobalStyles() {
     const css = `
-        /* 核心指示器样式 */
-        #typing_indicator.typing_indicator, #ti_preview_indicator {
+        /* 1. 共享的基础外观（无布局属性） */
+        .typing_indicator {
             opacity: 1 !important;
             padding: 8px 5px;
-            margin: 5px auto; /* 【已修改】使用auto实现水平居中 */
             border-radius: 8px;
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 0.2em;
-            width: fit-content;
+            margin: 5px 0; /* 默认的上下边距 */
+        }
+
+        /* 2. 仅用于设置中预览框的特殊布局 */
+        #ti_preview_indicator {
+            margin-left: auto;   /* 使用auto实现水平居中 */
+            margin-right: auto;
+            width: fit-content;   /* 宽度由内容决定 */
             min-width: 150px;
         }
+
+        /* 【已修复】不再为真实指示器设置任何强制布局样式，
+           使其完全受主题CSS控制。 */
 
         /* 预览容器样式 */
         #ti_preview_container {
@@ -135,13 +145,12 @@ function injectGlobalStyles() {
              border-radius: 8px;
              padding: 10px 0;
              margin: 10px 0;
-             /* 【已修改】移除flex布局，回归标准块级布局 */
         }
         .ti-preview-title {
             font-weight: bold;
             font-size: 1em;
             margin-bottom: 15px;
-            padding-left: 10px; /* 【已修改】添加左内边距以实现左对齐 */
+            padding-left: 10px;
         }
 
         /* 省略号动画 */
@@ -279,7 +288,7 @@ function addExtensionSettings(settings) {
             previewContainer.style.display = 'none';
             return;
         }
-        previewContainer.style.display = 'block'; // 【已修改】确保容器是块级元素
+        previewContainer.style.display = 'block';
 
         const placeholder = '{char}';
         const sampleCharName = t`角色`;
@@ -664,25 +673,24 @@ function showTypingIndicator(type, _args, dryRun) {
     const htmlContent = textHtml + animationHtml;
     const colorStyle = settings.fontColor ? settings.fontColor : '';
 
-    const existingIndicator = document.getElementById('typing_indicator');
-    if (existingIndicator) {
-        existingIndicator.innerHTML = htmlContent;
-        existingIndicator.style.color = colorStyle;
-        return;
-    }
+    let typingIndicator = document.getElementById('typing_indicator');
+    if (typingIndicator) {
+        typingIndicator.innerHTML = htmlContent;
+        typingIndicator.style.color = colorStyle;
+    } else {
+        typingIndicator = document.createElement('div');
+        typingIndicator.id = 'typing_indicator';
+        typingIndicator.classList.add('typing_indicator'); // 应用基础外观
+        typingIndicator.style.color = colorStyle;
+        typingIndicator.innerHTML = htmlContent;
 
-    const typingIndicator = document.createElement('div');
-    typingIndicator.id = 'typing_indicator';
-    typingIndicator.classList.add('typing_indicator');
-    typingIndicator.style.color = colorStyle;
-    typingIndicator.innerHTML = htmlContent;
-
-    const chat = document.getElementById('chat');
-    if (chat) {
-        const wasChatScrolledDown = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 5;
-        chat.appendChild(typingIndicator);
-        if (wasChatScrolledDown) {
-            chat.scrollTop = chat.scrollHeight;
+        const chat = document.getElementById('chat');
+        if (chat) {
+            const wasChatScrolledDown = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 5;
+            chat.appendChild(typingIndicator);
+            if (wasChatScrolledDown) {
+                chat.scrollTop = chat.scrollHeight;
+            }
         }
     }
 }
