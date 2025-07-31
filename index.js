@@ -130,14 +130,11 @@ function injectGlobalStyles() {
 
         /* 2. 仅用于设置中预览框的特殊布局 */
         #ti_preview_indicator {
-            margin-left: auto;   /* 使用auto实现水平居中 */
+            margin-left: auto;
             margin-right: auto;
-            width: fit-content;   /* 宽度由内容决定 */
+            width: fit-content;
             min-width: 150px;
         }
-
-        /* 【已修复】不再为真实指示器设置任何强制布局样式，
-           使其完全受主题CSS控制。 */
 
         /* 预览容器样式 */
         #ti_preview_container {
@@ -224,12 +221,15 @@ function injectGlobalStyles() {
             color: var(--text_color_attention);
         }
 
-        /* CSS 编辑器样式 */
+        /* 【已修复】CSS 编辑器样式 */
         .ti-css-editor {
             width: 100%;
-            resize: none;
-            overflow-y: hidden;
+            box-sizing: border-box; /* 确保 padding 不会影响总宽度 */
             line-height: 1.5;
+            min-height: 80px;      /* 设置最小高度 */
+            max-height: 250px;     /* 设置最大高度，超出后可滚动 */
+            resize: vertical;      /* 允许用户垂直拖动调整大小 */
+            overflow: auto;        /* 确保在需要时显示滚动条 */
         }
     `;
     let styleTag = document.getElementById('typing-indicator-global-style');
@@ -522,13 +522,6 @@ function addExtensionSettings(settings) {
     const cssEditor = document.createElement('textarea');
     cssEditor.classList.add('ti-css-editor'); // 添加新样式类
 
-    const autosizeTextarea = (textarea) => {
-        setTimeout(() => {
-            textarea.style.height = 'auto';
-            textarea.style.height = `${textarea.scrollHeight}px`;
-        }, 0);
-    };
-
     const populateThemes = () => {
         themeSelector.innerHTML = '';
         Object.keys(settings.themes).forEach(themeName => {
@@ -541,7 +534,6 @@ function addExtensionSettings(settings) {
     };
     const loadThemeIntoEditor = (themeName) => {
         cssEditor.value = settings.themes[themeName]?.css || '';
-        autosizeTextarea(cssEditor);
     };
     const applyActiveTheme = () => {
         const activeThemeName = settings.activeTheme;
@@ -558,8 +550,7 @@ function addExtensionSettings(settings) {
     cssEditorLabel.textContent = t`主题 CSS (高级)：`;
     cssEditorLabel.style.display = 'block';
     cssEditorLabel.style.marginTop = '10px';
-    cssEditor.rows = 3; // 初始行数可以小一些
-    cssEditor.placeholder = t`在此处输入 CSS 代码可实时预览和自动调整高度。`;
+    cssEditor.placeholder = t`在此处输入 CSS 代码可实时预览。`;
     inlineDrawerContent.append(cssEditorLabel, cssEditor);
     
     const themeButtonContainer = document.createElement('div');
@@ -578,17 +569,16 @@ function addExtensionSettings(settings) {
     themeButtonContainer.append(saveThemeButton, newThemeButton, deleteThemeButton);
     inlineDrawerContent.append(themeButtonContainer);
 
-    // CSS 实时预览与自适应高度
+    // CSS 实时预览
     cssEditor.addEventListener('input', () => {
         applyCss(cssEditor.value);
-        autosizeTextarea(cssEditor);
     });
 
     themeSelector.addEventListener('change', () => {
         const selectedTheme = themeSelector.value;
         settings.activeTheme = selectedTheme;
         loadThemeIntoEditor(selectedTheme);
-        applyActiveTheme(); // 应用所选主题的已保存CSS
+        applyActiveTheme();
         saveSettingsDebounced();
         refreshPreview();
     });
@@ -680,7 +670,7 @@ function showTypingIndicator(type, _args, dryRun) {
     } else {
         typingIndicator = document.createElement('div');
         typingIndicator.id = 'typing_indicator';
-        typingIndicator.classList.add('typing_indicator'); // 应用基础外观
+        typingIndicator.classList.add('typing_indicator');
         typingIndicator.style.color = colorStyle;
         typingIndicator.innerHTML = htmlContent;
 
