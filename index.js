@@ -221,15 +221,22 @@ function injectGlobalStyles() {
             color: var(--text_color_attention);
         }
 
-        /* 【已修复】CSS 编辑器样式 */
+        /* CSS 编辑器样式 */
         .ti-css-editor {
             width: 100%;
-            box-sizing: border-box; /* 确保 padding 不会影响总宽度 */
+            box-sizing: border-box;
             line-height: 1.5;
-            min-height: 80px;      /* 设置最小高度 */
-            max-height: 250px;     /* 设置最大高度，超出后可滚动 */
-            resize: vertical;      /* 允许用户垂直拖动调整大小 */
-            overflow: auto;        /* 确保在需要时显示滚动条 */
+            min-height: 80px;
+            max-height: 250px;
+            resize: vertical;
+            overflow: auto;
+        }
+
+        /* 【已修复】为移动端增加最小高度 */
+        @media (max-width: 768px) {
+            .ti-css-editor {
+                min-height: 160px;
+            }
         }
     `;
     let styleTag = document.getElementById('typing-indicator-global-style');
