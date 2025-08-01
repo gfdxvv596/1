@@ -1,5 +1,6 @@
 import {
-    name2,
+    name1, // name1 通常是用户
+    name2, // name2 通常是角色
     eventSource,
     event_types,
     isStreamingEnabled,
@@ -18,6 +19,12 @@ const legacyIndicatorTemplate = document.getElementById('typing_indicator_templa
  */
 
 /**
+ * @typedef {Object} CharacterBinding
+ * @property {string} activeCustomText - 绑定的内容预设名称
+ * @property {string} activeTheme - 绑定的外观主题名称
+ */
+
+/**
  * @typedef {Object} TypingIndicatorSettings
  * @property {boolean} enabled
  * @property {boolean} streaming
@@ -29,6 +36,7 @@ const legacyIndicatorTemplate = document.getElementById('typing_indicator_templa
  * @property {string} activeCustomText - 当前激活的预设名称
  * @property {Object.<string, Theme>} themes
  * @property {string} activeTheme
+ * @property {Object.<string, CharacterBinding>} characterBindings - 角色绑定设置
  */
 
 /**
@@ -70,6 +78,7 @@ const defaultSettings = {
             `,
         },
     },
+    characterBindings: {}, // 新增：角色绑定
 };
 
 /**
@@ -165,6 +174,17 @@ function injectGlobalStyles() {
             66%, 100% { content: '...'; }
         }
 
+        /* 复选框网格布局 (新增) */
+        .ti-checkbox-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 15px; /* 行间距 列间距 */
+            margin: 8px 0;
+        }
+        .ti-checkbox-grid .checkbox_label {
+            margin: 0; /* 清除label自带的margin */
+        }
+
         /* 字体颜色选择器 UI */
         .ti_color_picker_wrapper {
             display: flex;
@@ -238,6 +258,32 @@ function injectGlobalStyles() {
                 min-height: 160px;
             }
         }
+        
+        /* 角色绑定UI样式 */
+        .ti-char-binding-container {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: var(--background_panel);
+            border-radius: 8px;
+        }
+        .ti-char-binding-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .ti-char-binding-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .ti-char-binding-controls > label {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+        }
+        .ti-char-binding-controls select {
+             flex-basis: 60%;
+        }
+
     `;
     let styleTag = document.getElementById('typing-indicator-global-style');
     if (!styleTag) {
@@ -271,12 +317,15 @@ function addExtensionSettings(settings) {
     const inlineDrawerContent = document.createElement('div');
     inlineDrawerContent.classList.add('inline-drawer-content');
     inlineDrawer.append(inlineDrawerToggle, inlineDrawerContent);
+    
+    let refreshCharacterBindingUI;
 
     const refreshIndicator = () => {
         const indicator = document.getElementById('typing_indicator');
         if (indicator) {
             showTypingIndicator('refresh', null, false);
         }
+        if (refreshCharacterBindingUI) refreshCharacterBindingUI();
     };
     
     // -- 预览区域 --
@@ -297,13 +346,15 @@ function addExtensionSettings(settings) {
         }
         previewContainer.style.display = 'block';
 
-        const placeholder = '{char}';
-        const sampleCharName = t`角色`;
-        const activePreset = settings.activeCustomText || '默认';
-        let finalText = settings.customTexts[activePreset] || defaultSettings.customTexts['默认'];
+        const charName = name2 || t`角色`;
+        const binding = settings.characterBindings[charName];
 
+        const activePresetName = binding?.activeCustomText || settings.activeCustomText || '默认';
+        let finalText = settings.customTexts[activePresetName] || defaultSettings.customTexts['默认'];
+
+        const placeholder = '{char}';
         if (settings.showCharName) {
-            finalText = finalText.includes(placeholder) ? finalText.replace(placeholder, sampleCharName) : `${sampleCharName}${finalText}`;
+            finalText = finalText.includes(placeholder) ? finalText.replace(placeholder, charName) : `${charName}${finalText}`;
         } else {
             finalText = finalText.replace(placeholder, '').replace(/  +/g, ' ').trim();
         }
@@ -315,10 +366,19 @@ function addExtensionSettings(settings) {
         
         previewIndicator.innerHTML = textHtml + animationHtml;
         previewIndicator.style.color = settings.fontColor || '';
+        
+        const activeThemeName = binding?.activeTheme || settings.activeTheme;
+        const theme = settings.themes[activeThemeName];
+        if (theme) {
+            applyCss(theme.css);
+        }
     };
 
 
-    // -- 主要设置项 --
+    // -- 主要设置项 (两列布局修改) --
+    const checkboxGrid = document.createElement('div');
+    checkboxGrid.className = 'ti-checkbox-grid';
+
     const enabledCheckboxLabel = document.createElement('label');
     enabledCheckboxLabel.classList.add('checkbox_label');
     const enabledCheckbox = document.createElement('input');
@@ -329,7 +389,7 @@ function addExtensionSettings(settings) {
         saveSettingsDebounced();
     });
     enabledCheckboxLabel.append(enabledCheckbox, document.createTextNode(t`启用`));
-    inlineDrawerContent.append(enabledCheckboxLabel);
+    checkboxGrid.append(enabledCheckboxLabel);
 
     const showIfStreamingCheckboxLabel = document.createElement('label');
     showIfStreamingCheckboxLabel.classList.add('checkbox_label');
@@ -341,7 +401,7 @@ function addExtensionSettings(settings) {
         saveSettingsDebounced();
     });
     showIfStreamingCheckboxLabel.append(showIfStreamingCheckbox, document.createTextNode(t`流式传输时显示`));
-    inlineDrawerContent.append(showIfStreamingCheckboxLabel);
+    checkboxGrid.append(showIfStreamingCheckboxLabel);
 
     const animationEnabledCheckboxLabel = document.createElement('label');
     animationEnabledCheckboxLabel.classList.add('checkbox_label');
@@ -355,7 +415,7 @@ function addExtensionSettings(settings) {
         refreshPreview();
     });
     animationEnabledCheckboxLabel.append(animationEnabledCheckbox, document.createTextNode(t`启用动画`));
-    inlineDrawerContent.append(animationEnabledCheckboxLabel);
+    checkboxGrid.append(animationEnabledCheckboxLabel);
     
     const showNameCheckboxLabel = document.createElement('label');
     showNameCheckboxLabel.classList.add('checkbox_label');
@@ -369,7 +429,7 @@ function addExtensionSettings(settings) {
         refreshPreview();
     });
     showNameCheckboxLabel.append(showNameCheckbox, document.createTextNode(t`显示角色名称`));
-    inlineDrawerContent.append(showNameCheckboxLabel);
+    checkboxGrid.append(showNameCheckboxLabel);
 
     const isPreviewEnabledCheckboxLabel = document.createElement('label');
     isPreviewEnabledCheckboxLabel.classList.add('checkbox_label');
@@ -382,7 +442,9 @@ function addExtensionSettings(settings) {
         refreshPreview();
     });
     isPreviewEnabledCheckboxLabel.append(isPreviewEnabledCheckbox, document.createTextNode(t`启用预览`));
-    inlineDrawerContent.append(isPreviewEnabledCheckboxLabel);
+    checkboxGrid.append(isPreviewEnabledCheckboxLabel);
+    
+    inlineDrawerContent.append(checkboxGrid); // 将整个网格添加到设置内容中
 
     // 字体颜色选择器
     const colorPickerWrapper = document.createElement('div');
@@ -492,6 +554,7 @@ function addExtensionSettings(settings) {
             loadPresetIntoEditor(newPresetName);
             saveSettingsDebounced();
             refreshPreview();
+            if(refreshCharacterBindingUI) refreshCharacterBindingUI();
         } else if (settings.customTexts[newPresetName]) {
             alert(t`该名称的预设已存在！`);
         }
@@ -511,6 +574,7 @@ function addExtensionSettings(settings) {
             saveSettingsDebounced();
             refreshIndicator();
             refreshPreview();
+            if(refreshCharacterBindingUI) refreshCharacterBindingUI();
         }
     });
 
@@ -519,15 +583,95 @@ function addExtensionSettings(settings) {
     loadPresetIntoEditor(settings.activeCustomText);
 
 
+    // 角色绑定区域
+    const charBindingContainer = document.createElement('div');
+    charBindingContainer.className = 'ti-char-binding-container';
+    
+    const charBindingTitle = document.createElement('div');
+    charBindingTitle.className = 'ti-char-binding-title';
+    
+    const charBindingControls = document.createElement('div');
+    charBindingControls.className = 'ti-char-binding-controls';
+    
+    charBindingContainer.append(charBindingTitle, charBindingControls);
+
+    refreshCharacterBindingUI = () => {
+        const currentCharName = name2;
+        if (!currentCharName) {
+            charBindingContainer.style.display = 'none';
+            return;
+        }
+        charBindingContainer.style.display = 'block';
+        charBindingTitle.textContent = t`为角色 '${currentCharName}' 单独设置：`;
+        charBindingControls.innerHTML = '';
+
+        const binding = settings.characterBindings[currentCharName] || {};
+
+        const textBindingLabel = document.createElement('label');
+        textBindingLabel.textContent = t`内容预设：`;
+        const textBindingSelector = document.createElement('select');
+        Object.keys(settings.customTexts).forEach(presetName => {
+            const option = document.createElement('option');
+            option.value = presetName;
+            option.textContent = presetName;
+            textBindingSelector.appendChild(option);
+        });
+        textBindingSelector.value = binding.activeCustomText || settings.activeCustomText;
+        textBindingSelector.addEventListener('change', () => {
+             if (!settings.characterBindings[currentCharName]) settings.characterBindings[currentCharName] = {};
+             settings.characterBindings[currentCharName].activeCustomText = textBindingSelector.value;
+             saveSettingsDebounced();
+             refreshPreview();
+        });
+        textBindingLabel.append(textBindingSelector);
+
+        const themeBindingLabel = document.createElement('label');
+        themeBindingLabel.textContent = t`外观主题：`;
+        const themeBindingSelector = document.createElement('select');
+        Object.keys(settings.themes).forEach(themeName => {
+            const option = document.createElement('option');
+            option.value = themeName;
+            option.textContent = themeName;
+            themeBindingSelector.appendChild(option);
+        });
+        themeBindingSelector.value = binding.activeTheme || settings.activeTheme;
+        themeBindingSelector.addEventListener('change', () => {
+            if (!settings.characterBindings[currentCharName]) settings.characterBindings[currentCharName] = {};
+            settings.characterBindings[currentCharName].activeTheme = themeBindingSelector.value;
+            saveSettingsDebounced();
+            refreshPreview();
+        });
+        themeBindingLabel.append(themeBindingSelector);
+        
+        const clearBindingButton = document.createElement('button');
+        clearBindingButton.textContent = t`清除此角色绑定`;
+        clearBindingButton.classList.add('danger-button');
+        clearBindingButton.style.marginTop = '5px';
+        clearBindingButton.addEventListener('click', () => {
+            if(confirm(t`确定要清除角色 '${currentCharName}' 的所有绑定设置吗？`)) {
+                delete settings.characterBindings[currentCharName];
+                saveSettingsDebounced();
+                refreshCharacterBindingUI();
+                refreshPreview();
+            }
+        });
+
+        charBindingControls.append(textBindingLabel, themeBindingLabel, clearBindingButton);
+    };
+
+    inlineDrawerContent.append(charBindingContainer);
+    refreshCharacterBindingUI();
+
+
     // 主题管理部分
     const themeDivider = document.createElement('hr');
     inlineDrawerContent.append(themeDivider);
 
     const themeSelectorLabel = document.createElement('label');
-    themeSelectorLabel.textContent = t`外观主题：`;
+    themeSelectorLabel.textContent = t`全局外观主题：`;
     const themeSelector = document.createElement('select');
     const cssEditor = document.createElement('textarea');
-    cssEditor.classList.add('ti-css-editor'); // 添加新样式类
+    cssEditor.classList.add('ti-css-editor');
 
     const populateThemes = () => {
         themeSelector.innerHTML = '';
@@ -542,8 +686,11 @@ function addExtensionSettings(settings) {
     const loadThemeIntoEditor = (themeName) => {
         cssEditor.value = settings.themes[themeName]?.css || '';
     };
-    const applyActiveTheme = () => {
-        const activeThemeName = settings.activeTheme;
+    const applyActiveTheme = (charName = null) => {
+        let activeThemeName = settings.activeTheme;
+        if (charName && settings.characterBindings[charName]?.activeTheme) {
+            activeThemeName = settings.characterBindings[charName].activeTheme;
+        }
         const theme = settings.themes[activeThemeName];
         if (theme) {
             applyCss(theme.css);
@@ -576,7 +723,6 @@ function addExtensionSettings(settings) {
     themeButtonContainer.append(saveThemeButton, newThemeButton, deleteThemeButton);
     inlineDrawerContent.append(themeButtonContainer);
 
-    // CSS 实时预览
     cssEditor.addEventListener('input', () => {
         applyCss(cssEditor.value);
     });
@@ -585,7 +731,7 @@ function addExtensionSettings(settings) {
         const selectedTheme = themeSelector.value;
         settings.activeTheme = selectedTheme;
         loadThemeIntoEditor(selectedTheme);
-        applyActiveTheme();
+        applyActiveTheme(name2);
         saveSettingsDebounced();
         refreshPreview();
     });
@@ -605,6 +751,7 @@ function addExtensionSettings(settings) {
             applyCss(settings.themes[newThemeName].css);
             saveSettingsDebounced();
             refreshPreview();
+            if(refreshCharacterBindingUI) refreshCharacterBindingUI();
         } else if (settings.themes[newThemeName]) {
             alert(t`该名称的主题已存在！`);
         }
@@ -620,14 +767,15 @@ function addExtensionSettings(settings) {
             settings.activeTheme = '默认';
             populateThemes();
             loadThemeIntoEditor(settings.activeTheme);
-            applyActiveTheme();
+            applyActiveTheme(name2);
             saveSettingsDebounced();
             refreshPreview();
+            if(refreshCharacterBindingUI) refreshCharacterBindingUI();
         }
     });
     
     loadThemeIntoEditor(settings.activeTheme);
-    refreshPreview(); // 初始化预览
+    refreshPreview();
 }
 
 /**
@@ -645,20 +793,28 @@ function showTypingIndicator(type, _args, dryRun) {
         return;
     }
     
-    if (settings.showCharName && !name2 && type !== 'refresh') {
+    if (settings.showCharName && !name2) {
         return;
     }
 
     if (legacyIndicatorTemplate && selected_group && !isStreamingEnabled()) {
         return;
     }
+    
+    const charName = name2;
+    const binding = charName ? settings.characterBindings[charName] : undefined;
+
+    const activePresetName = binding?.activeCustomText || settings.activeCustomText || '默认';
+    const activeThemeName = binding?.activeTheme || settings.activeTheme;
+    
+    const theme = settings.themes[activeThemeName];
+    if(theme) applyCss(theme.css);
+
+    let finalText = settings.customTexts[activePresetName] || defaultSettings.customTexts['默认'];
 
     const placeholder = '{char}';
-    const activePreset = settings.activeCustomText || '默认';
-    let finalText = settings.customTexts[activePreset] || defaultSettings.customTexts['默认'];
-
-    if (settings.showCharName && name2) {
-        finalText = finalText.includes(placeholder) ? finalText.replace(placeholder, name2) : `${name2}${finalText}`;
+    if (settings.showCharName && charName) {
+        finalText = finalText.includes(placeholder) ? finalText.replace(placeholder, charName) : `${charName}${finalText}`;
     } else {
         finalText = finalText.replace(placeholder, '').replace(/  +/g, ' ').trim();
     }
@@ -708,7 +864,10 @@ function hideTypingIndicator() {
     const settings = getSettings();
     addExtensionSettings(settings);
 
-    const activeTheme = settings.themes[settings.activeTheme];
+    const charName = name2;
+    const binding = charName ? settings.characterBindings[charName] : undefined;
+    const activeThemeName = binding?.activeTheme || settings.activeTheme;
+    const activeTheme = settings.themes[activeThemeName];
     if (activeTheme) {
         applyCss(activeTheme.css);
     }
@@ -718,4 +877,19 @@ function hideTypingIndicator() {
 
     showIndicatorEvents.forEach(e => eventSource.on(e, showTypingIndicator));
     hideIndicatorEvents.forEach(e => eventSource.on(e, hideTypingIndicator));
+    
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+        setTimeout(() => {
+            const indicator = document.getElementById('typing_indicator');
+            if (indicator) {
+                showTypingIndicator('refresh', null, false);
+            }
+            const settingsContainer = document.getElementById('typing_indicator_container');
+            if (settingsContainer) {
+                 settingsContainer.innerHTML = '';
+                 addExtensionSettings(getSettings());
+            }
+        }, 100);
+    });
+
 })();
